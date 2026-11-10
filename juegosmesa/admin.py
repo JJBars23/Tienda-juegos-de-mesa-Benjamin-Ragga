@@ -14,9 +14,4 @@ class CategoriaAdmin(admin.ModelAdmin):
     list_display = ('nombre',)
     search_fields = ('nombre',) 
 
-@admin.register(Pedido)
-class PedidoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'usuario', 'fecha', 'total')
-    search_fields = ('usuario__username',)
-    list_filter = ('fecha',)
 
