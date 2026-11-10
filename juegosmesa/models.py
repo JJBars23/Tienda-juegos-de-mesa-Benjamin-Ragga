@@ -29,6 +29,7 @@ class Pedido(models.Model):
     hora_pedido = models.TimeField(auto_now_add=True)
     juegos = models.ForeignKey(Juego, on_delete=models.CASCADE)
     cantidad_juegos = models.PositiveIntegerField()
+    total_pedido = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
         return f"Pedido de {self.nombre_cliente} - {self.fecha_pedido}"
