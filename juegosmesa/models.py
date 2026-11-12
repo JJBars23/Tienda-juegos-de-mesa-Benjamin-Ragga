@@ -31,4 +31,4 @@ class Pedido(models.Model):
     total_pedido = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
-        return f"Pedido de {self.nombre_cliente} - {self.fecha_pedido}"
+        return f"Pedido de {self.nombre_cliente} - {self.fecha_hora_pedido}"
