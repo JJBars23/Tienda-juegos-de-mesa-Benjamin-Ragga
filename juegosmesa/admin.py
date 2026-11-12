@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import Juego, Categoria, Pedido
 
 # Register your models here.
@@ -9,7 +10,11 @@ class JuegoAdmin(admin.ModelAdmin):
     search_fields = ('nombre', 'categoria__nombre')
     list_filter = ('categoria',)
 
-    
+    @admin.display(description='vista_previa')
+    def miniatura(self, obj):
+        if obj.imagen:
+            return format_html('<img src="{}" style="height: 60px; border-radius: 4px;" />', obj.imagen.url)
+        return '-'
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
