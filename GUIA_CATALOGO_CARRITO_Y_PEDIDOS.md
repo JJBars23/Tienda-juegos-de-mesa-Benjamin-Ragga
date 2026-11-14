@@ -5,12 +5,15 @@ Esta guía describe cómo hacer que los juegos cargados desde Django Admin apare
 ## 1. Cómo está organizado ahora
 
 - `juegosmesa/models.py` define `Juego`, `Categoria` y `Pedido`.
+- Cada juego puede tener varias categorías; se eligen en Django Admin.
 - `juegosmesa/admin.py` registra esos modelos para administrarlos desde `/admin/`.
-- `juegosmesa/views.py` tiene `Home`, que ahora solo renderiza `index.html`; no consulta juegos ni entrega datos al template.
-- `templates/index.html` tiene el encabezado y un `<main>` vacío.
+- `juegosmesa/views.py` consulta los juegos disponibles y ofrece búsqueda por nombre y categoría; también tiene la vista de detalle.
+- `templates/index.html` muestra el buscador, las categorías y las tarjetas de juegos.
 - `config/settings.py` ya configura `MEDIA_URL` y `MEDIA_ROOT`.
 - `config/urls.py` ya sirve archivos de `MEDIA_ROOT` durante `DEBUG` y tiene `/` como ruta de Home.
 - `requirements.txt` incluye Pillow, que Django necesita para procesar `ImageField`.
+
+El modelo `Juego` permite asignar varias categorías. Si acabas de actualizar el proyecto, ejecuta `python manage.py migrate` para actualizar la base de datos. Esa migración también corrige las columnas de `Pedido` que no coincidían con el modelo.
 
 El objetivo es una tienda para clientes, no otra pantalla para administrar juegos:
 
@@ -40,13 +43,13 @@ def Home(request):
 
     juegos = Juego.objects.filter(
         stock__gte=1,
-    ).select_related("categoria")
+    ).prefetch_related("categorias")
 
     if nombre:
         juegos = juegos.filter(nombre__icontains=nombre)
 
     if categoria_id.isdecimal():
-        juegos = juegos.filter(categoria_id=int(categoria_id))
+        juegos = juegos.filter(categorias__id=int(categoria_id)).distinct()
 
     contexto = {
         "juegos": juegos,
@@ -61,8 +64,8 @@ def Home(request):
 
 - `stock__gte=1` cumple el requisito de no mostrar juegos agotados. Si se usa `stock__gt=0`, el resultado es equivalente para un campo entero.
 - `nombre__icontains` busca por coincidencia parcial y no distingue mayúsculas/minúsculas.
-- El filtro `categoria_id` permite combinar categoría y búsqueda por nombre; `.isdecimal()` evita que un valor no numérico en la URL cause un error al convertirlo a entero.
-- `select_related("categoria")` carga la categoría junto con cada juego.
+- El filtro `categorias__id` encuentra juegos que tienen la categoría seleccionada; `.distinct()` evita repetir un juego si coincide con más de una categoría.
+- `prefetch_related("categorias")` carga las categorías asociadas sin hacer una consulta extra por juego.
 - Se pasan todas las categorías para llenar el selector, aunque algún resultado no tenga juegos disponibles.
 
 El modelo también tiene `disponibilidad`. El filtro anterior muestra cualquier juego con stock de al menos uno, tal como se pide. Si el administrador debe poder ocultar del catálogo un juego que sí tiene stock, añade también `disponibilidad=True`; en ese caso el stock y el interruptor deben estar activos para que aparezca.
@@ -101,10 +104,10 @@ En `templates/index.html`, agrega un formulario `GET` para buscar y filtrar. Los
 </form>
 ```
 
-Luego, en la misma página, muestra los juegos. El enlace de la foto y el del nombre llevan al detalle; el botón de agregar al carrito es una acción distinta:
+Luego, en la misma página, muestra los juegos. El enlace de la foto y el del nombre llevan al detalle:
 
 ```html
-{% load humanize %}
+{% load formatos %}
 
 <div class="row">
     {% for juego in juegos %}
@@ -128,13 +131,16 @@ Luego, en la misma página, muestra los juegos. El enlace de la foto y el del no
                         {{ juego.nombre }}
                     </a>
                 </h2>
-                <p>Categoría: {{ juego.categoria.nombre }}</p>
-                <p>Precio: ${{ juego.precio|floatformat:"0u"|intcomma }}</p>
+                <p>
+                    Categorías:
+                    {% for categoria in juego.categorias.all %}
+                        {{ categoria.nombre }}{% if not forloop.last %}, {% endif %}
+                    {% empty %}
+                        Sin categoría
+                    {% endfor %}
+                </p>
+                <p>Precio: ${{ juego.precio|clp }}</p>
 
-                <form method="post" action="{% url 'agregar_carrito' juego.id %}">
-                    {% csrf_token %}
-                    <button type="submit">Agregar al carrito</button>
-                </form>
             </div>
         </article>
     </div>
@@ -144,40 +150,36 @@ Luego, en la misma página, muestra los juegos. El enlace de la foto y el del no
 </div>
 ```
 
-La plantilla usa `{% url 'detalle_juego' juego.pk %}` y `{% url 'agregar_carrito' juego.id %}`. Debes crear esas rutas con esos nombres; si falta una, Django muestra `NoReverseMatch` al renderizar el catálogo. El `{% empty %}` sí es válido y muestra un mensaje si no hay resultados.
+La plantilla usa `{% url 'detalle_juego' juego.pk %}`; esa ruta debe existir o Django mostrará `NoReverseMatch` al renderizar el catálogo. Por ahora, las tarjetas no incluyen una acción de carrito. El `{% empty %}` sí es válido y muestra un mensaje si no hay resultados.
 
 #### Formato chileno del precio
 
-Para representar pesos chilenos sin centavos, por ejemplo `$12.990`, el ejemplo usa `floatformat:"0u"` para redondear a cero decimales y `intcomma` para agrupar miles. Configura la localización para que el separador de miles sea punto y agrega `django.contrib.humanize` a `INSTALLED_APPS` en `config/settings.py`:
+Para mostrar pesos chilenos sin centavos, por ejemplo `$22.990`, el proyecto usa el filtro `clp` definido en `juegosmesa/templatetags/formatos.py`. En la plantilla carga `{% load formatos %}` y escribe el símbolo `$` antes del filtro:
 
 ```python
-INSTALLED_APPS = [
-    # ...
-    "django.contrib.humanize",
-]
-
-USE_THOUSAND_SEPARATOR = True
-THOUSAND_SEPARATOR = "."
-DECIMAL_SEPARATOR = ","
-NUMBER_GROUPING = 3
+{% load formatos %}
+Precio: ${{ juego.precio|clp }}
 ```
 
-En Django Admin, `INSTALLED_APPS` ya existe: agrega `django.contrib.humanize` dentro de esa lista, no reemplaces las aplicaciones existentes. Estos separadores afectan a otros números localizados de la aplicación, no solo al precio. Si necesitas conservar centavos, cambia el formato visual y define con el profesor si el precio debe mostrarse, por ejemplo, como `$12.990,50`. Si se modifica `DecimalField(decimal_places=2)` a cero decimales, eso es un cambio de modelo y requiere migración.
-
-Como el ejemplo usa `intcomma`, carga `humanize` en cada template que lo necesite. Si `index.html` extiende `base.html`, coloca `{% load humanize %}` después de `{% extends "base.html" %}`. Si se omite la carga, Django no reconoce el filtro `intcomma`.
+El filtro agrupa los miles con punto sin depender del separador regional del sistema; así evita que aparezca un espacio en vez de un punto. Para un comprobante, usa la misma forma: `Total: ${{ pedido.total_pedido|clp }}`. El filtro solo cambia cómo se muestra el número, no el valor guardado.
 
 ### Paso 2.3: mostrar una miniatura en la tabla de Django Admin
 
-En `juegosmesa/admin.py`, ya existe el método `miniatura`, que genera una etiqueta `<img>` y devuelve `-` si el juego no tiene archivo. Sin embargo, actualmente `miniatura` **no está incluido** en `list_display`, por eso no se ve como columna en la lista de juegos.
+En `juegosmesa/admin.py`, configura el formulario de juegos para permitir seleccionar varias categorías. `filter_horizontal` muestra dos listas para pasar categorías al juego; no hay un límite de dos categorías. La columna `mostrar_categorias` resume las categorías en la lista.
 
 Inclúyelo como primer elemento de la tupla:
 
 ```python
 @admin.register(Juego)
 class JuegoAdmin(admin.ModelAdmin):
-    list_display = ("miniatura", "nombre", "categoria", "precio", "stock")
-    search_fields = ("nombre", "categoria__nombre")
-    list_filter = ("categoria",)
+    list_display = ("miniatura", "nombre", "mostrar_categorias", "precio", "stock")
+    search_fields = ("nombre", "categorias__nombre")
+    list_filter = ("categorias",)
+    filter_horizontal = ("categorias",)
+
+    @admin.display(description="Categorías")
+    def mostrar_categorias(self, obj):
+        return ", ".join(categoria.nombre for categoria in obj.categorias.all())
 
     @admin.display(description="Imagen")
     def miniatura(self, obj):
@@ -189,7 +191,7 @@ class JuegoAdmin(admin.ModelAdmin):
         return "-"
 ```
 
-La lista del admin solo muestra columnas declaradas en `list_display`; definir el método por sí solo no basta. Mantén `format_html` para construir HTML seguro y revisa que el recorrido de archivos de medios descrito en la sección siguiente funcione. Si falta la imagen, la columna mostrará `-`; si el archivo o la configuración de medios están mal, puede aparecer una imagen rota.
+La lista del admin solo muestra columnas declaradas en `list_display`; definir los métodos por sí solos no basta. Mantén `format_html` para construir HTML seguro y revisa que el recorrido de archivos de medios descrito en la sección siguiente funcione. Si falta la imagen, la columna mostrará `-`; si el archivo o la configuración de medios están mal, puede aparecer una imagen rota.
 
 ### Paso 2.4: crear una página de detalle
 
@@ -336,7 +338,7 @@ def comprobante(request, codigo):
     return render(request, "comprobante.html", {"pedido": pedido})
 ```
 
-En el template muestra código, juego, nombre del cliente, cantidad, total con el formato chileno definido anteriormente y fecha/hora, por ejemplo `{{ pedido.fecha_hora_pedido|date:"d/m/Y H:i" }}`.
+En el template muestra código, juego, nombre del cliente, cantidad, total con `{{ pedido.total_pedido|clp }}` y fecha/hora, por ejemplo `{{ pedido.fecha_hora_pedido|date:"d/m/Y H:i" }}`. Carga `{% load formatos %}` al principio de la plantilla para usar `clp`.
 
 El flujo después de un `POST` exitoso debe ser **guardar y redirigir** (`redirect("comprobante", codigo=pedido.codigo)`). El navegador entonces muestra el comprobante mediante una petición `GET`. Recargar esa página solo vuelve a leer el pedido guardado: no ejecuta el formulario de compra ni descuenta stock otra vez. Si se renderiza directamente el comprobante como respuesta al `POST`, el navegador puede volver a enviar el formulario al recargar y crear pedidos duplicados.
 
@@ -416,7 +418,7 @@ Esto significa dos unidades del juego 12 y una del juego 19. Al mostrar o confir
 4. Guarda o incrementa esa cantidad en `request.session["carrito"]`.
 5. Crea una vista de carrito que vuelva a cargar cada juego y muestre nombre, imagen, precio actual, cantidad y subtotal.
 6. Agrega acciones para cambiar cantidades y quitar juegos. Valida de nuevo el stock en esas acciones.
-7. Define rutas con nombres estables, por ejemplo `agregar_carrito`, `ver_carrito`, `actualizar_carrito` y `quitar_carrito`.
+7. Define rutas con nombres estables para ver, actualizar y quitar elementos del carrito.
 
 La sesión está habilitada en la configuración actual: están instaladas las aplicaciones y el middleware de sesiones. Si se quitan, `request.session` deja de estar disponible. Un carrito de sesión normalmente pertenece a ese navegador/sesión; no se sincroniza entre dispositivos. Para carritos persistentes asociados a cuentas, se necesita un modelo de carrito y una relación con el usuario.
 

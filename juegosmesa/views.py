@@ -11,13 +11,13 @@ def Home(request):
 
     juegos = Juego.objects.filter(
         stock__gte=1,
-    ).select_related("categoria")
+    ).prefetch_related("categorias")
 
     if nombre:
         juegos = juegos.filter(nombre__icontains=nombre)
 
     if categoria_id.isdecimal():
-        juegos = juegos.filter(categoria_id=int(categoria_id))
+        juegos = juegos.filter(categorias__id=int(categoria_id)).distinct()
 
     contexto = {
         "juegos": juegos,

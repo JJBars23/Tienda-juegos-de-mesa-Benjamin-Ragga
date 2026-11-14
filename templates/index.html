@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load formatos %}
 
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
@@ -69,13 +69,15 @@
                                     {{ juego.nombre }}
                                 </a>
                             </h2>
-                            <p>Categoría: {{ juego.categoria.nombre }}</p>
-                            <p>Precio: ${{ juego.precio|floatformat:"0u"|intcomma }}</p>
-
-                            <form method="post" action="{% url 'agregar_carrito' juego.id %}">
-                                {% csrf_token %}
-                                <button type="submit">Agregar al carrito</button>
-                            </form>
+                            <p>
+                                Categorías:
+                                {% for categoria in juego.categorias.all %}
+                                    {{ categoria.nombre }}{% if not forloop.last %}, {% endif %}
+                                {% empty %}
+                                    Sin categoría
+                                {% endfor %}
+                            </p>
+                            <p>Precio: ${{ juego.precio|clp }}</p>
                         </div>
                     </article>
                 </div>
