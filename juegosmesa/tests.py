@@ -19,6 +19,31 @@ class ChileanPriceFormatTests(TestCase):
                 )
 
 
+class StorefrontTemplateTests(TestCase):
+    def test_home_uses_shared_base_template(self):
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "base.html")
+        self.assertContains(response, 'lang="es-CL"')
+        self.assertContains(response, "Saltar al contenido")
+
+    def test_game_detail_uses_shared_base_template(self):
+        juego = Juego.objects.create(
+            nombre="Juego de prueba",
+            cantidad_jugadores=4,
+            edad_minima=8,
+            precio=12990,
+            stock=1,
+        )
+
+        response = self.client.get(reverse("detalle_juego", args=[juego.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "base.html")
+        self.assertContains(response, "Juego de prueba")
+
+
 class JuegoCategoriaAdminTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser(

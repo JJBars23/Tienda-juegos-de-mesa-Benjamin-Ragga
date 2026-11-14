@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load formatos %}
+
+{% block titulo %}{{ juego.nombre }} | Tienda de Juegos de Mesa{% endblock %}
+{% block descripcion %}Detalles de {{ juego.nombre }}, disponible en Tienda de Juegos de Mesa.{% endblock %}
+
+{% block contenido %}
+<article>
+    <p class="mb-4">
+        <a class="link-secondary" href="{% url 'home' %}#catalogo">
+            &larr; Volver al catálogo
+        </a>
+    </p>
+
+    <div class="row g-4 g-lg-5 align-items-start">
+        <div class="col-12 col-lg-6">
+            {% if juego.imagen %}
+            <img
+                class="img-fluid rounded-3 w-100"
+                src="{{ juego.imagen.url }}"
+                alt="{{ juego.nombre }}"
+            >
+            {% else %}
+            <div class="bg-body-secondary rounded-3 d-flex align-items-center justify-content-center text-body-secondary" style="min-height: 20rem;">
+                Imagen no disponible
+            </div>
+            {% endif %}
+        </div>
+        <div class="col-12 col-lg-6">
+            <p class="text-uppercase small fw-semibold text-body-secondary mb-2">
+                {% for categoria in juego.categorias.all %}
+                    {{ categoria.nombre }}{% if not forloop.last %} · {% endif %}
+                {% empty %}
+                    Juego de mesa
+                {% endfor %}
+            </p>
+            <h1 class="display-6 fw-bold">{{ juego.nombre }}</h1>
+            <p class="fs-3 fw-semibold">${{ juego.precio|clp }}</p>
+
+            {% if juego.descripcion %}
+            <p class="text-body-secondary">{{ juego.descripcion|linebreaksbr }}</p>
+            {% endif %}
+
+            <dl class="row border-top border-bottom py-3 my-4">
+                <dt class="col-7">Jugadores</dt>
+                <dd class="col-5">{{ juego.cantidad_jugadores }}</dd>
+                <dt class="col-7">Edad mínima</dt>
+                <dd class="col-5">{{ juego.edad_minima }}+</dd>
+                <dt class="col-7">Disponibilidad</dt>
+                <dd class="col-5">
+                    {% if juego.stock > 0 %}En stock{% else %}Agotado{% endif %}
+                </dd>
+            </dl>
+
+            <a class="btn btn-outline-primary" href="{% url 'home' %}#catalogo">
+                Seguir explorando
+            </a>
+        </div>
+    </div>
+</article>
+{% endblock %}

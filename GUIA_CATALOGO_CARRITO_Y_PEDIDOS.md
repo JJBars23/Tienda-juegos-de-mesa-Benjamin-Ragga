@@ -1,6 +1,6 @@
 # Guía: catálogo, carrito y pedidos
 
-Esta guía describe cómo hacer que los juegos cargados desde Django Admin aparezcan en la página de inicio, permitir que un cliente arme un carrito y guardar su pedido. **No se han modificado las vistas, modelos ni templates de la aplicación**: la idea es que puedas aplicar y explicar los cambios tú mismo.
+Esta guía resume cómo mostrar los juegos cargados desde Django Admin y describe cómo incorporar un carrito y guardar pedidos. Home y el detalle ya comparten `templates/base.html`; las indicaciones de catálogo sirven como referencia y el flujo de compra sigue siendo trabajo futuro.
 
 ## 1. Cómo está organizado ahora
 
@@ -72,9 +72,9 @@ El modelo también tiene `disponibilidad`. El filtro anterior muestra cualquier 
 
 Si la vista no pasa `juegos`, la lista no tendrá elementos que mostrar. Si no pasa `categorias`, el menú de filtro no podrá construirse.
 
-### Paso 2.2: crear búsqueda, filtro y tarjetas clickeables
+### Paso 2.2: búsqueda, filtro y tarjetas clickeables
 
-En `templates/index.html`, agrega un formulario `GET` para buscar y filtrar. Los parámetros en la URL permiten compartir o recargar los resultados:
+`templates/index.html` ya extiende `templates/base.html` y contiene el formulario `GET` de búsqueda y filtro, además de las tarjetas enlazadas al detalle. Los parámetros en la URL permiten compartir o recargar los resultados:
 
 ```html
 <form method="get" action="{% url 'home' %}">
