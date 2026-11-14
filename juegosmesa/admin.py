@@ -6,7 +6,7 @@ from .models import Juego, Categoria, Pedido
 
 @admin.register(Juego)
 class JuegoAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'categoria', 'precio', 'stock')
+    list_display = ("miniatura", "nombre", "categoria", "precio", "stock")
     search_fields = ('nombre', 'categoria__nombre')
     list_filter = ('categoria',)
 

@@ -1,5 +1,7 @@
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
+from django.shortcuts import get_object_or_404
+
 
 from .models import Categoria, Juego, Pedido
 
@@ -24,3 +26,7 @@ def Home(request):
         "categoria_seleccionada": categoria_id,
     }
     return render(request, "index.html", contexto)
+
+def detalle_juego(request, pk):
+    juego = get_object_or_404(Juego, pk=pk)
+    return render(request, "juegos/detalle.html", {"juego": juego})

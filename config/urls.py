@@ -7,6 +7,7 @@ import juegosmesa.views as views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.Home, name='home'),
+    path("juegos/<int:pk>/", views.detalle_juego, name="detalle_juego"),
 ]
 
 if settings.DEBUG:
