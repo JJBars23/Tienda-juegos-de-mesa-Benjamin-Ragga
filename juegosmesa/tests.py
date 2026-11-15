@@ -6,7 +6,7 @@ from django.template import Context, Template
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Categoria, DetallePedido, Juego, Pedido
+from .models import Categoria, Juego, Pedido
 
 
 class CategoriaUniquenessTests(TestCase):
@@ -29,17 +29,14 @@ class CategoryDeletionTests(TestCase):
         )
 
     def create_order(self, juego):
-        pedido = Pedido.objects.create(
+        return Pedido.objects.create(
             nombre_cliente="Cliente de prueba",
             correo_cliente="cliente@example.com",
             telefono_cliente="123456789",
-        )
-        DetallePedido.objects.create(
-            pedido=pedido,
             juego=juego,
             cantidad_juegos=1,
+            total_pedido=juego.precio,
         )
-        return pedido
 
     def test_eliminar_categoria_elimina_juegos_que_solo_la_tienen_y_sus_pedidos(self):
         categoria = Categoria.objects.create(nombre="Estrategia")
@@ -65,48 +62,40 @@ class CategoryDeletionTests(TestCase):
         self.assertEqual(list(juego.categorias.all()), [otra_categoria])
         self.assertTrue(Pedido.objects.filter(pk=pedido.pk).exists())
 
-    def test_eliminar_juego_elimina_solo_sus_pedidos(self):
+    def test_eliminar_juego_elimina_su_pedido(self):
         juego_a_eliminar = self.create_game("Juego eliminado")
-        juego_del_mismo_pedido = self.create_game("Otro juego del pedido")
         juego_en_otro_pedido = self.create_game("Juego de otro pedido")
         pedido_a_eliminar = self.create_order(juego_a_eliminar)
-        DetallePedido.objects.create(
-            pedido=pedido_a_eliminar,
-            juego=juego_del_mismo_pedido,
-            cantidad_juegos=2,
-        )
         otro_pedido = self.create_order(juego_en_otro_pedido)
 
         juego_a_eliminar.delete()
 
-        pedido_a_eliminar.refresh_from_db()
-        self.assertEqual(
-            list(pedido_a_eliminar.detalles.values_list("juego__nombre", flat=True)),
-            ["Otro juego del pedido"],
-        )
-        self.assertEqual(pedido_a_eliminar.total_pedido, 25980)
+        self.assertFalse(Pedido.objects.filter(pk=pedido_a_eliminar.pk).exists())
         self.assertTrue(Pedido.objects.filter(pk=otro_pedido.pk).exists())
-
-    def test_eliminar_unico_juego_elimina_el_pedido(self):
-        juego = self.create_game("Único juego")
-        pedido = self.create_order(juego)
-
-        juego.delete()
-
-        self.assertFalse(Pedido.objects.filter(pk=pedido.pk).exists())
 
 
 class PedidoCodeTests(TestCase):
     def test_codigo_se_genera_unico_al_crear_cada_pedido(self):
+        juego = Juego.objects.create(
+            nombre="Juego de prueba",
+            cantidad_jugadores=2,
+            edad_minima=8,
+            precio=5000,
+            stock=2,
+        )
         pedido_a = Pedido.objects.create(
             nombre_cliente="Cliente A",
             correo_cliente="a@example.com",
             telefono_cliente="111111111",
+            juego=juego,
+            cantidad_juegos=1,
         )
         pedido_b = Pedido.objects.create(
             nombre_cliente="Cliente B",
             correo_cliente="b@example.com",
             telefono_cliente="222222222",
+            juego=juego,
+            cantidad_juegos=1,
         )
 
         self.assertIsNotNone(pedido_a.codigo)
@@ -240,6 +229,10 @@ class PublicOrderTests(TestCase):
     def test_visitante_puede_enviar_un_pedido_y_se_descontar_el_stock(self):
         respuesta_agregar = self.agregar_juego()
         self.assertRedirects(respuesta_agregar, reverse("carrito"))
+        self.assertContains(
+            self.client.get(reverse("carrito")),
+            'aria-label="Mi pedido, 2 unidades"',
+        )
         self.assertEqual(Pedido.objects.count(), 0)
 
         response = self.client.post(
@@ -251,9 +244,8 @@ class PublicOrderTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "juegos/pedido_confirmado.html")
         pedido = Pedido.objects.get(nombre_cliente="Cliente de prueba")
-        detalle = pedido.detalles.get()
-        self.assertEqual(detalle.juego, self.juego)
-        self.assertEqual(detalle.cantidad_juegos, 2)
+        self.assertEqual(pedido.juego, self.juego)
+        self.assertEqual(pedido.cantidad_juegos, 2)
         self.assertEqual(pedido.total_pedido, 25980)
         self.assertContains(response, str(pedido.codigo))
         self.assertContains(response, "Juego para pedido")
@@ -326,7 +318,7 @@ class PublicOrderTests(TestCase):
         self.juego.refresh_from_db()
         self.assertEqual(self.juego.stock, 0)
 
-    def test_pedido_puede_incluir_varios_juegos(self):
+    def test_pedido_no_admite_un_segundo_juego(self):
         otro_juego = Juego.objects.create(
             nombre="Otro juego para pedido",
             cantidad_jugadores=2,
@@ -335,25 +327,26 @@ class PublicOrderTests(TestCase):
             stock=2,
         )
         self.agregar_juego()
-        respuesta_segundo_juego = self.agregar_juego(otro_juego, cantidad=1)
-        self.assertRedirects(respuesta_segundo_juego, reverse("carrito"))
-
-        response = self.client.post(
-            self.checkout_url,
-            self.datos_checkout,
+        respuesta_carrito = self.client.post(
+            reverse("detalle_juego", args=[otro_juego.pk]),
+            {"cantidad_juegos": 1},
             follow=True,
         )
-
-        self.assertEqual(response.status_code, 200)
-        pedido = Pedido.objects.get()
-        self.assertEqual(pedido.detalles.count(), 2)
-        self.assertEqual(pedido.total_pedido, 30980)
-        self.assertContains(response, "Juego para pedido")
-        self.assertContains(response, "Otro juego para pedido")
+        self.assertEqual(respuesta_carrito.status_code, 200)
+        self.assertEqual(respuesta_carrito.redirect_chain[0][0], reverse("carrito"))
+        self.assertContains(
+            respuesta_carrito,
+            "Juego para pedido",
+        )
+        self.assertContains(
+            respuesta_carrito,
+            "Solo puedes incluir un juego por pedido.",
+        )
+        self.assertEqual(Pedido.objects.count(), 0)
         self.juego.refresh_from_db()
         otro_juego.refresh_from_db()
-        self.assertEqual(self.juego.stock, 2)
-        self.assertEqual(otro_juego.stock, 1)
+        self.assertEqual(self.juego.stock, 4)
+        self.assertEqual(otro_juego.stock, 2)
 
     def test_stock_se_revalida_al_confirmar_el_carrito(self):
         self.agregar_juego()
@@ -378,7 +371,7 @@ class PublicOrderTests(TestCase):
         )
         self.assertRedirects(response, reverse("carrito"))
         self.assertEqual(
-            self.client.get(reverse("carrito")).context["carrito_items"][0]["cantidad"],
+            self.client.get(reverse("carrito")).context["carrito_cantidad"],
             3,
         )
 
@@ -388,7 +381,7 @@ class PublicOrderTests(TestCase):
         self.assertRedirects(response, reverse("carrito"))
         self.assertContains(
             self.client.get(reverse("carrito")),
-            "Aún no has agregado juegos",
+            "Aún no has agregado un juego",
         )
 
 
@@ -473,17 +466,14 @@ class PedidoAdminTests(TestCase):
         )
 
     def crear_pedido(self, juego, nombre, correo):
-        pedido = Pedido.objects.create(
+        return Pedido.objects.create(
             nombre_cliente=nombre,
             correo_cliente=correo,
             telefono_cliente="123456789",
-        )
-        DetallePedido.objects.create(
-            pedido=pedido,
             juego=juego,
             cantidad_juegos=1,
+            total_pedido=juego.precio,
         )
-        return pedido
 
     def test_admin_de_pedidos_carga_con_los_campos_del_modelo(self):
         categoria = Categoria.objects.create(nombre="Estrategia")
@@ -499,33 +489,18 @@ class PedidoAdminTests(TestCase):
             nombre_cliente="Cliente de prueba",
             correo_cliente="cliente@example.com",
             telefono_cliente="123456789",
-        )
-        DetallePedido.objects.create(
-            pedido=pedido,
             juego=juego,
             cantidad_juegos=2,
-        )
-        otro_juego = Juego.objects.create(
-            nombre="Otro juego de prueba",
-            cantidad_jugadores=2,
-            edad_minima=10,
-            precio=5000,
-            stock=1,
-        )
-        DetallePedido.objects.create(
-            pedido=pedido,
-            juego=otro_juego,
-            cantidad_juegos=3,
+            total_pedido=25980,
         )
 
         response = self.client.get(reverse("admin:juegosmesa_pedido_changelist"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(pedido.codigo))
-        self.assertContains(response, "Juego de prueba (2)")
-        self.assertContains(response, "Otro juego de prueba (3)")
+        self.assertContains(response, "Juego de prueba")
         self.assertContains(response, "Cliente de prueba")
-        self.assertContains(response, "5")
+        self.assertContains(response, "2")
         self.assertIn("fecha_hora_pedido", admin.site._registry[Pedido].list_display)
 
     def test_admin_filtra_pedidos_por_juego(self):

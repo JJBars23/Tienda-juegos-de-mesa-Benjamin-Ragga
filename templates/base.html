@@ -99,11 +99,11 @@
                         </button>
                     </form>
 
-                    {% with juegos_en_carrito=request.session.carrito_pedido|length %}
+                    {% with unidades_en_pedido=request.session.carrito_pedido.cantidad|default:"0" %}
                     <a
                         class="cart-token"
                         href="{% url 'carrito' %}"
-                        aria-label="Mi pedido, {{ juegos_en_carrito|default:'0' }} producto{{ juegos_en_carrito|pluralize }}"
+                        aria-label="Mi pedido, {{ unidades_en_pedido }} {{ unidades_en_pedido|pluralize:'unidad,unidades' }}"
                     >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M3 4h2l2.1 10.1a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 1.9-1.4L21 8H6"></path>
@@ -111,7 +111,7 @@
                             <circle cx="18" cy="20" r="1.2"></circle>
                         </svg>
                         <span class="cart-token__count" aria-hidden="true">
-                            {{ juegos_en_carrito|default:"0" }}
+                            {{ unidades_en_pedido }}
                         </span>
                         <span class="cart-token__label">Mi pedido</span>
                     </a>

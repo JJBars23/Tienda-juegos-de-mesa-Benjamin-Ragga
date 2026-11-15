@@ -1,12 +1,11 @@
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import F
-from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .forms import CantidadPedidoForm, PedidoPublicoForm
-from .models import Categoria, DetallePedido, Juego, Pedido
+from .models import Categoria, Juego, Pedido
 
 
 CARRITO_SESSION_KEY = "carrito_pedido"
@@ -16,92 +15,98 @@ class StockActualizadoError(Exception):
     pass
 
 
-def _cantidades_carrito(request):
-    carrito = request.session.get(CARRITO_SESSION_KEY, {})
+def _carrito_actual(request):
+    carrito = request.session.get(CARRITO_SESSION_KEY)
     if not isinstance(carrito, dict):
+        if carrito is None:
+            return None
         request.session.pop(CARRITO_SESSION_KEY, None)
         messages.warning(
             request,
             "El carrito anterior no era válido y se ha vaciado.",
         )
-        return {}
+        return None
 
-    carrito_valido = {
-        str(juego_id): cantidad
-        for juego_id, cantidad in carrito.items()
-        if str(juego_id).isdecimal()
+    juego_id = carrito.get("juego_id")
+    cantidad = carrito.get("cantidad")
+    if (
+        str(juego_id).isdecimal()
         and isinstance(cantidad, int)
         and not isinstance(cantidad, bool)
         and cantidad > 0
-    }
-    if carrito_valido != carrito:
-        request.session[CARRITO_SESSION_KEY] = carrito_valido
-        messages.warning(
-            request,
-            "Se quitaron datos no válidos del carrito.",
-        )
-    return carrito_valido
+    ):
+        carrito_actual = {"juego_id": str(juego_id), "cantidad": cantidad}
+        if carrito_actual != carrito:
+            request.session[CARRITO_SESSION_KEY] = carrito_actual
+        return carrito_actual
+
+    if len(carrito) == 1:
+        juego_id, cantidad = next(iter(carrito.items()))
+        if (
+            str(juego_id).isdecimal()
+            and isinstance(cantidad, int)
+            and not isinstance(cantidad, bool)
+            and cantidad > 0
+        ):
+            carrito_actual = {"juego_id": str(juego_id), "cantidad": cantidad}
+            request.session[CARRITO_SESSION_KEY] = carrito_actual
+            return carrito_actual
+
+    request.session.pop(CARRITO_SESSION_KEY, None)
+    messages.warning(
+        request,
+        "El carrito anterior no era válido y se ha vaciado.",
+    )
+    return None
 
 
 def _contexto_carrito(request, pedido_form=None):
-    cantidades = _cantidades_carrito(request)
-    juegos = {
-        str(juego.pk): juego
-        for juego in Juego.objects.filter(
-            pk__in=[int(juego_id) for juego_id in cantidades]
-        )
-    }
-    items = []
-    total = 0
-    juegos_eliminados = False
-
-    for juego_id, cantidad in list(cantidades.items()):
-        juego = juegos.get(juego_id)
-        if juego is None:
-            cantidades.pop(juego_id)
-            juegos_eliminados = True
-            continue
-
-        error = None
-        if not juego.disponibilidad:
-            error = "Este juego ya no está disponible para la venta."
-        elif juego.stock == 0:
-            error = "Este juego está agotado."
-        elif cantidad > 5:
-            error = "La cantidad máxima es 5 unidades por juego."
-        elif cantidad > juego.stock:
-            unidad = "unidad" if juego.stock == 1 else "unidades"
-            disponible = "disponible" if juego.stock == 1 else "disponibles"
-            error = f"Solo hay {juego.stock} {unidad} {disponible}."
-
-        items.append({
-            "juego": juego,
-            "cantidad": cantidad,
-            "subtotal": juego.precio * cantidad,
-            "error": error,
-            "puede_actualizar": juego.disponibilidad and juego.stock > 0,
-            "cantidad_form": CantidadPedidoForm(
-                initial={"cantidad_juegos": cantidad},
-                juego=juego,
-            ),
-        })
-        total += juego.precio * cantidad
-
-    if juegos_eliminados:
-        request.session[CARRITO_SESSION_KEY] = cantidades
-        messages.warning(
-            request,
-            "Se quitaron del carrito juegos que ya no existen.",
-        )
-
-    return {
-        "carrito_items": items,
-        "total_carrito": total,
-        "carrito_valido": bool(items) and all(
-            item["error"] is None for item in items
-        ),
+    carrito = _carrito_actual(request)
+    contexto = {
+        "carrito_juego": None,
+        "carrito_cantidad": 0,
+        "subtotal_carrito": 0,
+        "carrito_error": None,
+        "puede_actualizar": False,
+        "cantidad_form": None,
+        "carrito_valido": False,
         "pedido_form": pedido_form or PedidoPublicoForm(),
     }
+    if carrito is None:
+        return contexto
+
+    cantidad = carrito["cantidad"]
+    juego = Juego.objects.filter(pk=int(carrito["juego_id"])).first()
+    if juego is None:
+        request.session.pop(CARRITO_SESSION_KEY, None)
+        messages.warning(request, "El juego ya no existe y se quitó del pedido.")
+        return contexto
+
+    error = None
+    if not juego.disponibilidad:
+        error = "Este juego ya no está disponible para la venta."
+    elif juego.stock == 0:
+        error = "Este juego está agotado."
+    elif cantidad > 5:
+        error = "La cantidad máxima es 5 unidades."
+    elif cantidad > juego.stock:
+        unidad = "unidad" if juego.stock == 1 else "unidades"
+        disponible = "disponible" if juego.stock == 1 else "disponibles"
+        error = f"Solo hay {juego.stock} {unidad} {disponible}."
+
+    contexto.update({
+        "carrito_juego": juego,
+        "carrito_cantidad": cantidad,
+        "subtotal_carrito": juego.precio * cantidad,
+        "carrito_error": error,
+        "puede_actualizar": juego.disponibilidad and juego.stock > 0,
+        "cantidad_form": CantidadPedidoForm(
+            initial={"cantidad_juegos": cantidad},
+            juego=juego,
+        ),
+        "carrito_valido": error is None,
+    })
+    return contexto
 
 
 def Home(request):
@@ -139,8 +144,17 @@ def detalle_juego(request, pk):
             )
             form = CantidadPedidoForm(request.POST, juego=juego)
             if form.is_valid():
-                cantidades = _cantidades_carrito(request)
-                cantidad_actual = cantidades.get(str(juego.pk), 0)
+                carrito = _carrito_actual(request)
+                if carrito and carrito["juego_id"] != str(juego.pk):
+                    messages.error(
+                        request,
+                        (
+                            "Solo puedes incluir un juego por pedido. "
+                            "Quita el juego actual antes de elegir otro."
+                        ),
+                    )
+                    return redirect("carrito")
+                cantidad_actual = carrito["cantidad"] if carrito else 0
                 cantidad_nueva = (
                     cantidad_actual + form.cleaned_data["cantidad_juegos"]
                 )
@@ -154,8 +168,10 @@ def detalle_juego(request, pk):
                         ),
                     )
                 else:
-                    cantidades[str(juego.pk)] = cantidad_nueva
-                    request.session[CARRITO_SESSION_KEY] = cantidades
+                    request.session[CARRITO_SESSION_KEY] = {
+                        "juego_id": str(juego.pk),
+                        "cantidad": cantidad_nueva,
+                    }
                     messages.success(
                         request,
                         f"{juego.nombre} se agregó a tu pedido.",
@@ -187,16 +203,15 @@ def carrito(request):
 
 @require_POST
 def actualizar_carrito(request, pk):
-    cantidades = _cantidades_carrito(request)
+    carrito = _carrito_actual(request)
     juego_id = str(pk)
-    if juego_id not in cantidades:
+    if carrito is None or carrito["juego_id"] != juego_id:
         messages.warning(request, "Ese juego ya no está en tu pedido.")
         return redirect("carrito")
 
     juego = Juego.objects.filter(pk=pk).first()
     if juego is None:
-        cantidades.pop(juego_id)
-        request.session[CARRITO_SESSION_KEY] = cantidades
+        request.session.pop(CARRITO_SESSION_KEY, None)
         messages.warning(request, "Ese juego ya no existe y se quitó del pedido.")
         return redirect("carrito")
 
@@ -212,17 +227,19 @@ def actualizar_carrito(request, pk):
         )
         return redirect("carrito")
 
-    cantidades[juego_id] = form.cleaned_data["cantidad_juegos"]
-    request.session[CARRITO_SESSION_KEY] = cantidades
+    request.session[CARRITO_SESSION_KEY] = {
+        "juego_id": juego_id,
+        "cantidad": form.cleaned_data["cantidad_juegos"],
+    }
     messages.success(request, "Se actualizó la cantidad del juego.")
     return redirect("carrito")
 
 
 @require_POST
 def quitar_del_carrito(request, pk):
-    cantidades = _cantidades_carrito(request)
-    cantidades.pop(str(pk), None)
-    request.session[CARRITO_SESSION_KEY] = cantidades
+    carrito = _carrito_actual(request)
+    if carrito and carrito["juego_id"] == str(pk):
+        request.session.pop(CARRITO_SESSION_KEY, None)
     messages.success(request, "Se quitó el juego de tu pedido.")
     return redirect("carrito")
 
@@ -231,12 +248,13 @@ def quitar_del_carrito(request, pk):
 def confirmar_pedido(request):
     pedido_form = PedidoPublicoForm(request.POST)
     contexto = _contexto_carrito(request, pedido_form)
-    items = contexto["carrito_items"]
+    juego = contexto["carrito_juego"]
+    cantidad = contexto["carrito_cantidad"]
 
-    if not items:
+    if juego is None:
         pedido_form.add_error(
             None,
-            "Agrega al menos un juego antes de confirmar el pedido.",
+            "Agrega un juego antes de confirmar el pedido.",
         )
         return render(request, "juegos/carrito.html", contexto)
 
@@ -245,47 +263,37 @@ def confirmar_pedido(request):
 
     try:
         with transaction.atomic():
-            juego_ids = [item["juego"].pk for item in items]
-            juegos_actuales = {
-                juego.pk: juego
-                for juego in Juego.objects.select_for_update().filter(
-                    pk__in=juego_ids
+            juego_actual = Juego.objects.select_for_update().filter(
+                pk=juego.pk,
+                disponibilidad=True,
+            ).first()
+            if juego_actual is None:
+                raise StockActualizadoError(
+                    f"{juego.nombre} ya no está disponible."
                 )
-            }
-
-            for item in items:
-                juego = juegos_actuales.get(item["juego"].pk)
-                if juego is None or not juego.disponibilidad:
-                    raise StockActualizadoError(
-                        f"{item['juego'].nombre} ya no está disponible."
-                    )
-                if juego.stock < item["cantidad"]:
-                    unidad = "unidad" if juego.stock == 1 else "unidades"
-                    raise StockActualizadoError(
-                        f"Solo quedan {juego.stock} {unidad} de "
-                        f"{juego.nombre}."
-                    )
-
-            for item in items:
-                juego = item["juego"]
-                actualizadas = Juego.objects.filter(
-                    pk=juego.pk,
-                    disponibilidad=True,
-                    stock__gte=item["cantidad"],
-                ).update(stock=F("stock") - item["cantidad"])
-                if not actualizadas:
-                    raise StockActualizadoError(
-                        f"El stock de {juego.nombre} cambió. "
-                        "Revisa las unidades disponibles."
-                    )
-
-            pedido = pedido_form.save()
-            for item in items:
-                DetallePedido.objects.create(
-                    pedido=pedido,
-                    juego=item["juego"],
-                    cantidad_juegos=item["cantidad"],
+            if juego_actual.stock < cantidad:
+                unidad = "unidad" if juego_actual.stock == 1 else "unidades"
+                raise StockActualizadoError(
+                    f"Solo quedan {juego_actual.stock} {unidad} de "
+                    f"{juego_actual.nombre}."
                 )
+
+            actualizadas = Juego.objects.filter(
+                pk=juego_actual.pk,
+                disponibilidad=True,
+                stock__gte=cantidad,
+            ).update(stock=F("stock") - cantidad)
+            if not actualizadas:
+                raise StockActualizadoError(
+                    f"El stock de {juego_actual.nombre} cambió. "
+                    "Revisa las unidades disponibles."
+                )
+
+            pedido = pedido_form.save(commit=False)
+            pedido.juego = juego_actual
+            pedido.cantidad_juegos = cantidad
+            pedido.total_pedido = juego_actual.precio * cantidad
+            pedido.save()
     except StockActualizadoError as error:
         messages.error(request, str(error))
         return redirect("carrito")
@@ -296,7 +304,7 @@ def confirmar_pedido(request):
 
 def pedido_confirmado(request, codigo):
     pedido = get_object_or_404(
-        Pedido.objects.prefetch_related("detalles__juego"),
+        Pedido.objects.select_related("juego"),
         codigo=codigo,
     )
     return render(request, "juegos/pedido_confirmado.html", {"pedido": pedido})

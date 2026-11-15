@@ -11,14 +11,12 @@
     <p class="fs-4 fw-semibold" aria-label="Código de pedido">{{ pedido.codigo }}</p>
 
     <p><strong>Nombre:</strong> {{ pedido.nombre_cliente }}</p>
-    <h2 class="h5 mt-4">Juegos pedidos</h2>
+    <h2 class="h5 mt-4">Juego pedido</h2>
     <ul class="list-group mb-4">
-        {% for detalle in pedido.detalles.all %}
         <li class="list-group-item d-flex justify-content-between">
-            <span>{{ detalle.juego.nombre }}</span>
-            <span>{{ detalle.cantidad_juegos }} unidad(es)</span>
+            <span>{{ pedido.juego.nombre }}</span>
+            <span>{{ pedido.cantidad_juegos }} unidad(es)</span>
         </li>
-        {% endfor %}
     </ul>
 
     <p class="fs-5"><strong>Total:</strong> ${{ pedido.total_pedido|clp }} CLP</p>

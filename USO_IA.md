@@ -1,1 +1,3 @@
-Este proyecto contó con la asistencia de GitHub Copilot para depuración de errores, apoyo en la definición de modelos/migraciones (soporte para pedidos con múltiples juegos), generación de pruebas automatizadas y diseño estetico de la pagina. La lógica de negocio, integración y validación final fueron supervisadas manualmente ejecutando la suite de pruebas y los chequeos de integridad de Django (manage.py test)
+Este proyecto contó con la asistencia de GitHub Copilot para depuración de errores, apoyo en la definición de modelos y migraciones para pedidos de un solo juego, generación de pruebas automatizadas y diseño estético de la página. La lógica de negocio, integración y validación final fueron supervisadas manualmente ejecutando la suite de pruebas y los chequeos de integridad de Django (manage.py test).
+
+Luego de revisar la pauta, se utilizó IA para analizar la complejidad del código y eliminar el sistema de múltiples juegos en un solo pedido.
