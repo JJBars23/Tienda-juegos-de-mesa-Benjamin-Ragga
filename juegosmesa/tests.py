@@ -127,11 +127,26 @@ class ChileanPriceFormatTests(TestCase):
 class StorefrontTemplateTests(TestCase):
     def test_home_uses_shared_base_template(self):
         Juego.objects.create(
+            nombre="Juego disponible",
+            cantidad_jugadores=2,
+            edad_minima=8,
+            precio=5000,
+            stock=1,
+        )
+        Juego.objects.create(
             nombre="Juego agotado",
             cantidad_jugadores=2,
             edad_minima=8,
             precio=5000,
             stock=0,
+        )
+        Juego.objects.create(
+            nombre="Juego no disponible",
+            cantidad_jugadores=2,
+            edad_minima=8,
+            precio=5000,
+            stock=3,
+            disponibilidad=False,
         )
         response = self.client.get(reverse("home"))
 
@@ -139,8 +154,9 @@ class StorefrontTemplateTests(TestCase):
         self.assertTemplateUsed(response, "base.html")
         self.assertContains(response, 'lang="es-CL"')
         self.assertContains(response, "Saltar al contenido")
-        self.assertContains(response, "Juego agotado")
-        self.assertContains(response, "Agotado")
+        self.assertContains(response, "Juego disponible")
+        self.assertNotContains(response, "Juego agotado")
+        self.assertNotContains(response, "Juego no disponible")
 
     def test_game_detail_uses_shared_base_template(self):
         juego = Juego.objects.create(
@@ -157,21 +173,34 @@ class StorefrontTemplateTests(TestCase):
         self.assertTemplateUsed(response, "base.html")
         self.assertContains(response, "Juego de prueba")
 
-    def test_juego_sin_stock_aparece_agotado_y_no_muestra_formulario(self):
-        juego = Juego.objects.create(
-            nombre="Juego agotado",
-            cantidad_jugadores=2,
-            edad_minima=8,
-            precio=5000,
-            stock=0,
-        )
+    def test_juegos_agotados_o_no_disponibles_responden_404_en_detalle(self):
+        juegos_no_publicos = [
+            Juego.objects.create(
+                nombre="Juego agotado",
+                cantidad_jugadores=2,
+                edad_minima=8,
+                precio=5000,
+                stock=0,
+            ),
+            Juego.objects.create(
+                nombre="Juego no disponible",
+                cantidad_jugadores=2,
+                edad_minima=8,
+                precio=5000,
+                stock=3,
+                disponibilidad=False,
+            ),
+        ]
 
-        response = self.client.get(reverse("detalle_juego", args=[juego.pk]))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Agotado")
-        self.assertContains(response, "no tiene unidades disponibles")
-        self.assertNotContains(response, 'name="cantidad_juegos"')
+        for juego in juegos_no_publicos:
+            with self.subTest(juego=juego.nombre):
+                url = reverse("detalle_juego", args=[juego.pk])
+                self.assertEqual(self.client.get(url).status_code, 404)
+                self.assertEqual(
+                    self.client.post(url, {"cantidad_juegos": 1}).status_code,
+                    404,
+                )
+                self.assertEqual(Pedido.objects.count(), 0)
 
 
 class PublicOrderTests(TestCase):
@@ -268,7 +297,7 @@ class PublicOrderTests(TestCase):
 
         response = self.client.post(self.url, self.datos_pedido)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 404)
         self.assertEqual(Pedido.objects.count(), 0)
         self.juego.refresh_from_db()
         self.assertEqual(self.juego.stock, 0)
@@ -305,6 +334,29 @@ class JuegoCategoriaAdminTests(TestCase):
         campo = response.context["adminform"].form.fields["categorias"]
         self.assertEqual(len(campo.choices), 3)
         self.assertIn("categorias", admin.site._registry[Juego].filter_horizontal)
+
+    def test_admin_muestra_si_el_juego_esta_agotado_o_no_disponible(self):
+        Juego.objects.create(
+            nombre="Juego agotado",
+            cantidad_jugadores=2,
+            edad_minima=8,
+            precio=5000,
+            stock=0,
+        )
+        Juego.objects.create(
+            nombre="Juego no disponible",
+            cantidad_jugadores=2,
+            edad_minima=8,
+            precio=5000,
+            stock=3,
+            disponibilidad=False,
+        )
+
+        response = self.client.get(reverse("admin:juegosmesa_juego_changelist"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Agotado")
+        self.assertContains(response, "No disponible")
 
 
 class PedidoAdminTests(TestCase):

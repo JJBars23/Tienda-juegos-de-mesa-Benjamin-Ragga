@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import F
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import PedidoPublicoForm
@@ -9,7 +10,10 @@ def Home(request):
     nombre = request.GET.get("nombre", "").strip()
     categoria_id = request.GET.get("categoria", "").strip()
 
-    juegos = Juego.objects.all().prefetch_related("categorias")
+    juegos = Juego.objects.filter(
+        disponibilidad=True,
+        stock__gt=0,
+    ).prefetch_related("categorias")
 
     if nombre:
         juegos = juegos.filter(nombre__icontains=nombre)
@@ -31,12 +35,15 @@ def detalle_juego(request, pk):
             juego = get_object_or_404(
                 Juego.objects.select_for_update(),
                 pk=pk,
+                disponibilidad=True,
+                stock__gt=0,
             )
             form = PedidoPublicoForm(request.POST, juego=juego)
             if form.is_valid():
                 cantidad = form.cleaned_data["cantidad_juegos"]
                 stock_actualizado = Juego.objects.filter(
                     pk=juego.pk,
+                    disponibilidad=True,
                     stock__gte=cantidad,
                 ).update(stock=F("stock") - cantidad)
 
@@ -53,12 +60,19 @@ def detalle_juego(request, pk):
                     )
 
                 juego.refresh_from_db()
+                if not juego.disponibilidad or juego.stock <= 0:
+                    raise Http404
                 form.add_error(
                     "cantidad_juegos",
                     f"Solo hay {juego.stock} unidades disponibles.",
                 )
     else:
-        juego = get_object_or_404(Juego, pk=pk)
+        juego = get_object_or_404(
+            Juego,
+            pk=pk,
+            disponibilidad=True,
+            stock__gt=0,
+        )
         form = PedidoPublicoForm(juego=juego)
 
     return render(

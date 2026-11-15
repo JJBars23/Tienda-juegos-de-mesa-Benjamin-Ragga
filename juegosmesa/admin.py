@@ -9,7 +9,14 @@ from .models import Categoria, DetallePedido, Juego, Pedido
 
 @admin.register(Juego)
 class JuegoAdmin(admin.ModelAdmin):
-    list_display = ("miniatura", "nombre", "mostrar_categorias", "disponibilidad", "precio", "stock")
+    list_display = (
+        "miniatura",
+        "nombre",
+        "mostrar_categorias",
+        "estado",
+        "precio",
+        "stock",
+    )
     search_fields = ('nombre', 'categorias__nombre')
     list_filter = ('categorias', 'disponibilidad',)
     filter_horizontal = ("categorias",)
@@ -17,6 +24,14 @@ class JuegoAdmin(admin.ModelAdmin):
     @admin.display(description="Categorías")
     def mostrar_categorias(self, obj):
         return ", ".join(categoria.nombre for categoria in obj.categorias.all())
+
+    @admin.display(description="Estado")
+    def estado(self, obj):
+        if not obj.disponibilidad:
+            return "No disponible"
+        if obj.stock == 0:
+            return "Agotado"
+        return "Disponible"
 
     @admin.display(description='vista_previa')
     def miniatura(self, obj):
