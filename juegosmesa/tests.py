@@ -358,6 +358,12 @@ class JuegoCategoriaAdminTests(TestCase):
         self.assertContains(response, "Agotado")
         self.assertContains(response, "No disponible")
 
+    def test_admin_muestra_el_precio_en_pesos_chilenos(self):
+        response = self.client.get(reverse("admin:juegosmesa_juego_changelist"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "$12.990")
+
 
 class PedidoAdminTests(TestCase):
     def setUp(self):

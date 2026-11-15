@@ -4,6 +4,7 @@ from django.db.models.functions import Coalesce
 from django.utils.html import format_html
 
 from .models import Categoria, DetallePedido, Juego, Pedido
+from .templatetags.formatos import clp
 
 # Register your models here.
 
@@ -14,7 +15,7 @@ class JuegoAdmin(admin.ModelAdmin):
         "nombre",
         "mostrar_categorias",
         "estado",
-        "precio",
+        "precio_formateado",
         "stock",
     )
     search_fields = ('nombre', 'categorias__nombre')
@@ -32,6 +33,10 @@ class JuegoAdmin(admin.ModelAdmin):
         if obj.stock == 0:
             return "Agotado"
         return "Disponible"
+
+    @admin.display(description="Precio", ordering="precio")
+    def precio_formateado(self, obj):
+        return f"${clp(obj.precio)}"
 
     @admin.display(description='vista_previa')
     def miniatura(self, obj):
