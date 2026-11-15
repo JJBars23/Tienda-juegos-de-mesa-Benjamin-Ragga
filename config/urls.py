@@ -8,6 +8,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.Home, name='home'),
     path("juegos/<int:pk>/", views.detalle_juego, name="detalle_juego"),
+    path(
+        "pedidos/<uuid:codigo>/confirmado/",
+        views.pedido_confirmado,
+        name="pedido_confirmado",
+    ),
 ]
 
 if settings.DEBUG:

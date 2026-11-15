@@ -91,6 +91,13 @@
                         {% endfor %}
                     </p>
                     <p class="fs-5 fw-semibold mt-auto mb-0">${{ juego.precio|clp }}</p>
+                    <p class="small mt-2 mb-0">
+                        {% if juego.stock > 0 %}
+                        <span class="text-success">En stock</span>
+                        {% else %}
+                        <span class="text-danger">Agotado</span>
+                        {% endif %}
+                    </p>
                 </div>
             </article>
         </div>

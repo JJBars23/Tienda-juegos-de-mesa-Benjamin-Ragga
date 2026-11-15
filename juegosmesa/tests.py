@@ -126,12 +126,21 @@ class ChileanPriceFormatTests(TestCase):
 
 class StorefrontTemplateTests(TestCase):
     def test_home_uses_shared_base_template(self):
+        Juego.objects.create(
+            nombre="Juego agotado",
+            cantidad_jugadores=2,
+            edad_minima=8,
+            precio=5000,
+            stock=0,
+        )
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "base.html")
         self.assertContains(response, 'lang="es-CL"')
         self.assertContains(response, "Saltar al contenido")
+        self.assertContains(response, "Juego agotado")
+        self.assertContains(response, "Agotado")
 
     def test_game_detail_uses_shared_base_template(self):
         juego = Juego.objects.create(
@@ -147,6 +156,122 @@ class StorefrontTemplateTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "base.html")
         self.assertContains(response, "Juego de prueba")
+
+    def test_juego_sin_stock_aparece_agotado_y_no_muestra_formulario(self):
+        juego = Juego.objects.create(
+            nombre="Juego agotado",
+            cantidad_jugadores=2,
+            edad_minima=8,
+            precio=5000,
+            stock=0,
+        )
+
+        response = self.client.get(reverse("detalle_juego", args=[juego.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Agotado")
+        self.assertContains(response, "no tiene unidades disponibles")
+        self.assertNotContains(response, 'name="cantidad_juegos"')
+
+
+class PublicOrderTests(TestCase):
+    def setUp(self):
+        self.juego = Juego.objects.create(
+            nombre="Juego para pedido",
+            cantidad_jugadores=4,
+            edad_minima=8,
+            precio=12990,
+            stock=4,
+        )
+        self.url = reverse("detalle_juego", args=[self.juego.pk])
+        self.datos_pedido = {
+            "nombre_cliente": "Cliente de prueba",
+            "correo_cliente": "cliente@example.com",
+            "telefono_cliente": "123456789",
+            "cantidad_juegos": 2,
+        }
+
+    def test_visitante_puede_enviar_un_pedido_y_se_descontar_el_stock(self):
+        response = self.client.post(self.url, self.datos_pedido, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "juegos/pedido_confirmado.html")
+        pedido = Pedido.objects.get(nombre_cliente="Cliente de prueba")
+        detalle = pedido.detalles.get()
+        self.assertEqual(detalle.juego, self.juego)
+        self.assertEqual(detalle.cantidad_juegos, 2)
+        self.assertEqual(pedido.total_pedido, 25980)
+        self.assertContains(response, str(pedido.codigo))
+        self.assertContains(response, "Juego para pedido")
+        self.assertContains(response, "Cliente de prueba")
+        self.assertContains(response, "2 unidad(es)")
+        self.assertContains(response, "$25.980 CLP")
+        self.assertContains(response, "Fecha:")
+
+        response_recargada = self.client.get(response.redirect_chain[0][0])
+        self.assertEqual(response_recargada.status_code, 200)
+        self.assertEqual(Pedido.objects.count(), 1)
+
+        self.juego.refresh_from_db()
+        self.assertEqual(self.juego.stock, 2)
+
+    def test_no_permite_pedir_mas_unidades_que_el_stock_disponible(self):
+        datos_pedido = {**self.datos_pedido, "cantidad_juegos": 5}
+
+        response = self.client.post(self.url, datos_pedido)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Solo hay 4 unidades disponibles.")
+        self.assertEqual(Pedido.objects.count(), 0)
+        self.juego.refresh_from_db()
+        self.assertEqual(self.juego.stock, 4)
+
+    def test_cantidad_debe_estar_entre_1_y_5(self):
+        self.juego.stock = 10
+        self.juego.save(update_fields=["stock"])
+
+        for cantidad in (0, 6):
+            with self.subTest(cantidad=cantidad):
+                datos_pedido = {
+                    **self.datos_pedido,
+                    "cantidad_juegos": cantidad,
+                }
+                response = self.client.post(self.url, datos_pedido)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(
+                    response,
+                    "La cantidad debe estar entre 1 y 5.",
+                )
+                self.assertEqual(Pedido.objects.count(), 0)
+
+        self.juego.refresh_from_db()
+        self.assertEqual(self.juego.stock, 10)
+
+    def test_correo_invalido_no_guarda_el_pedido(self):
+        datos_pedido = {
+            **self.datos_pedido,
+            "correo_cliente": "correo-invalido",
+        }
+
+        response = self.client.post(self.url, datos_pedido)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("correo_cliente", response.context["pedido_form"].errors)
+        self.assertEqual(Pedido.objects.count(), 0)
+        self.juego.refresh_from_db()
+        self.assertEqual(self.juego.stock, 4)
+
+    def test_no_acepta_pedido_si_juego_esta_agotado(self):
+        self.juego.stock = 0
+        self.juego.save(update_fields=["stock"])
+
+        response = self.client.post(self.url, self.datos_pedido)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Pedido.objects.count(), 0)
+        self.juego.refresh_from_db()
+        self.assertEqual(self.juego.stock, 0)
 
 
 class JuegoCategoriaAdminTests(TestCase):

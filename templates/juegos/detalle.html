@@ -52,9 +52,34 @@
                 </dd>
             </dl>
 
-            <a class="btn btn-outline-primary" href="{% url 'home' %}#catalogo">
-                Seguir explorando
-            </a>
+            <section class="border-top pt-4 mt-4" aria-labelledby="pedido-titulo">
+                <h2 id="pedido-titulo" class="h4">Realizar pedido</h2>
+                {% if juego.stock > 0 %}
+                <form method="post" action="{% url 'detalle_juego' juego.pk %}">
+                    {% csrf_token %}
+                    {% for field in pedido_form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                        </label>
+                        {{ field }}
+                        {% if field.help_text %}
+                        <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                    {% for error in pedido_form.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">{{ error }}</div>
+                    {% endfor %}
+                    <button class="btn btn-primary" type="submit">Confirmar pedido</button>
+                </form>
+                {% else %}
+                <p class="text-body-secondary">Este juego no tiene unidades disponibles.</p>
+                {% endif %}
+            </section>
         </div>
     </div>
 </article>

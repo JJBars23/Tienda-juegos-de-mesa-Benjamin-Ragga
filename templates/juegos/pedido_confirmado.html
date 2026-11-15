@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load formatos %}
+
+{% block titulo %}Pedido confirmado | Tienda de Juegos de Mesa{% endblock %}
+{% block descripcion %}Confirmación de tu pedido en Tienda de Juegos de Mesa.{% endblock %}
+
+{% block contenido %}
+<section class="mx-auto" style="max-width: 42rem;" aria-labelledby="pedido-confirmado">
+    <h1 id="pedido-confirmado" class="h2">¡Pedido realizado!</h1>
+    <p>Guarda este código de identificación para consultar tu pedido:</p>
+    <p class="fs-4 fw-semibold" aria-label="Código de pedido">{{ pedido.codigo }}</p>
+
+    <p><strong>Nombre:</strong> {{ pedido.nombre_cliente }}</p>
+    <h2 class="h5 mt-4">Juegos pedidos</h2>
+    <ul class="list-group mb-4">
+        {% for detalle in pedido.detalles.all %}
+        <li class="list-group-item d-flex justify-content-between">
+            <span>{{ detalle.juego.nombre }}</span>
+            <span>{{ detalle.cantidad_juegos }} unidad(es)</span>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <p class="fs-5"><strong>Total:</strong> ${{ pedido.total_pedido|clp }} CLP</p>
+    <p><strong>Fecha:</strong> {{ pedido.fecha_hora_pedido|date:"d/m/Y H:i" }}</p>
+    <a class="btn btn-outline-primary" href="{% url 'home' %}">Volver al catálogo</a>
+</section>
+{% endblock %}
