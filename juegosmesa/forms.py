@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from .models import Pedido
 
 
-class PedidoPublicoForm(forms.ModelForm):
+class CantidadPedidoForm(forms.Form):
     cantidad_juegos = forms.IntegerField(
         label="Cantidad de unidades",
         min_value=1,
@@ -16,6 +16,30 @@ class PedidoPublicoForm(forms.ModelForm):
         ),
     )
 
+    def __init__(self, *args, juego, **kwargs):
+        self.juego = juego
+        super().__init__(*args, **kwargs)
+        cantidad = self.fields["cantidad_juegos"]
+        cantidad.widget.attrs["max"] = min(5, juego.stock)
+        cantidad.help_text = (
+            f"Unidades disponibles: {juego.stock}. "
+            "Puedes pedir hasta 5 unidades por juego."
+        )
+
+    def clean_cantidad_juegos(self):
+        cantidad = self.cleaned_data["cantidad_juegos"]
+        if cantidad > self.juego.stock:
+            unidad = "unidad" if self.juego.stock == 1 else "unidades"
+            disponible = "disponible" if self.juego.stock == 1 else "disponibles"
+            raise ValidationError(
+                f"Solo hay {self.juego.stock} {unidad} {disponible}."
+            )
+        if cantidad > 5:
+            raise ValidationError("La cantidad debe estar entre 1 y 5.")
+        return cantidad
+
+
+class PedidoPublicoForm(forms.ModelForm):
     class Meta:
         model = Pedido
         fields = (
@@ -28,20 +52,3 @@ class PedidoPublicoForm(forms.ModelForm):
             "correo_cliente": forms.EmailInput(attrs={"class": "form-control"}),
             "telefono_cliente": forms.TelInput(attrs={"class": "form-control"}),
         }
-
-    def __init__(self, *args, juego, **kwargs):
-        self.juego = juego
-        super().__init__(*args, **kwargs)
-        cantidad = self.fields["cantidad_juegos"]
-        cantidad.widget.attrs["max"] = min(5, juego.stock)
-        cantidad.help_text = f"Unidades disponibles: {juego.stock}."
-
-    def clean_cantidad_juegos(self):
-        cantidad = self.cleaned_data["cantidad_juegos"]
-        if cantidad > self.juego.stock:
-            raise ValidationError(
-                f"Solo hay {self.juego.stock} unidades disponibles."
-            )
-        if cantidad > 5:
-            raise ValidationError("La cantidad debe estar entre 1 y 5.")
-        return cantidad

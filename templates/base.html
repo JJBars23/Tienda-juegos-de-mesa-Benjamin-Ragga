@@ -71,6 +71,11 @@
                                     Catálogo
                                 </a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'carrito' %}">
+                                    Mi pedido
+                                </a>
+                            </li>
                         </ul>
                     </div>
                 </div>
@@ -78,6 +83,18 @@
         </header>
 
         <main id="contenido-principal" class="container flex-grow-1 py-4 py-lg-5">
+            {% if messages %}
+            <div class="mb-4" aria-live="polite">
+                {% for message in messages %}
+                <div
+                    class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %}"
+                    role="status"
+                >
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
             {% block contenido %}{% endblock %}
         </main>
 

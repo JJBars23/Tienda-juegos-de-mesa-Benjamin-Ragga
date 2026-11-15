@@ -212,16 +212,30 @@ class PublicOrderTests(TestCase):
             precio=12990,
             stock=4,
         )
-        self.url = reverse("detalle_juego", args=[self.juego.pk])
-        self.datos_pedido = {
+        self.checkout_url = reverse("confirmar_pedido")
+        self.datos_checkout = {
             "nombre_cliente": "Cliente de prueba",
             "correo_cliente": "cliente@example.com",
             "telefono_cliente": "123456789",
-            "cantidad_juegos": 2,
         }
 
+    def agregar_juego(self, juego=None, cantidad=2):
+        juego = juego or self.juego
+        return self.client.post(
+            reverse("detalle_juego", args=[juego.pk]),
+            {"cantidad_juegos": cantidad},
+        )
+
     def test_visitante_puede_enviar_un_pedido_y_se_descontar_el_stock(self):
-        response = self.client.post(self.url, self.datos_pedido, follow=True)
+        respuesta_agregar = self.agregar_juego()
+        self.assertRedirects(respuesta_agregar, reverse("carrito"))
+        self.assertEqual(Pedido.objects.count(), 0)
+
+        response = self.client.post(
+            self.checkout_url,
+            self.datos_checkout,
+            follow=True,
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "juegos/pedido_confirmado.html")
@@ -245,9 +259,7 @@ class PublicOrderTests(TestCase):
         self.assertEqual(self.juego.stock, 2)
 
     def test_no_permite_pedir_mas_unidades_que_el_stock_disponible(self):
-        datos_pedido = {**self.datos_pedido, "cantidad_juegos": 5}
-
-        response = self.client.post(self.url, datos_pedido)
+        response = self.agregar_juego(cantidad=5)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Solo hay 4 unidades disponibles.")
@@ -261,11 +273,7 @@ class PublicOrderTests(TestCase):
 
         for cantidad in (0, 6):
             with self.subTest(cantidad=cantidad):
-                datos_pedido = {
-                    **self.datos_pedido,
-                    "cantidad_juegos": cantidad,
-                }
-                response = self.client.post(self.url, datos_pedido)
+                response = self.agregar_juego(cantidad=cantidad)
 
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(
@@ -278,14 +286,16 @@ class PublicOrderTests(TestCase):
         self.assertEqual(self.juego.stock, 10)
 
     def test_correo_invalido_no_guarda_el_pedido(self):
-        datos_pedido = {
-            **self.datos_pedido,
+        self.agregar_juego()
+        datos_checkout = {
+            **self.datos_checkout,
             "correo_cliente": "correo-invalido",
         }
 
-        response = self.client.post(self.url, datos_pedido)
+        response = self.client.post(self.checkout_url, datos_checkout)
 
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "juegos/carrito.html")
         self.assertIn("correo_cliente", response.context["pedido_form"].errors)
         self.assertEqual(Pedido.objects.count(), 0)
         self.juego.refresh_from_db()
@@ -295,12 +305,80 @@ class PublicOrderTests(TestCase):
         self.juego.stock = 0
         self.juego.save(update_fields=["stock"])
 
-        response = self.client.post(self.url, self.datos_pedido)
+        response = self.client.post(
+            reverse("detalle_juego", args=[self.juego.pk]),
+            {"cantidad_juegos": 1},
+        )
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(Pedido.objects.count(), 0)
         self.juego.refresh_from_db()
         self.assertEqual(self.juego.stock, 0)
+
+    def test_pedido_puede_incluir_varios_juegos(self):
+        otro_juego = Juego.objects.create(
+            nombre="Otro juego para pedido",
+            cantidad_jugadores=2,
+            edad_minima=10,
+            precio=5000,
+            stock=2,
+        )
+        self.agregar_juego()
+        respuesta_segundo_juego = self.agregar_juego(otro_juego, cantidad=1)
+        self.assertRedirects(respuesta_segundo_juego, reverse("carrito"))
+
+        response = self.client.post(
+            self.checkout_url,
+            self.datos_checkout,
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pedido = Pedido.objects.get()
+        self.assertEqual(pedido.detalles.count(), 2)
+        self.assertEqual(pedido.total_pedido, 30980)
+        self.assertContains(response, "Juego para pedido")
+        self.assertContains(response, "Otro juego para pedido")
+        self.juego.refresh_from_db()
+        otro_juego.refresh_from_db()
+        self.assertEqual(self.juego.stock, 2)
+        self.assertEqual(otro_juego.stock, 1)
+
+    def test_stock_se_revalida_al_confirmar_el_carrito(self):
+        self.agregar_juego()
+        self.juego.stock = 1
+        self.juego.save(update_fields=["stock"])
+
+        response = self.client.post(self.checkout_url, self.datos_checkout)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "juegos/carrito.html")
+        self.assertContains(response, "Solo hay 1 unidad disponible.")
+        self.assertEqual(Pedido.objects.count(), 0)
+        self.juego.refresh_from_db()
+        self.assertEqual(self.juego.stock, 1)
+
+    def test_carrito_permite_actualizar_y_quitar_juegos(self):
+        self.agregar_juego()
+
+        response = self.client.post(
+            reverse("actualizar_carrito", args=[self.juego.pk]),
+            {"cantidad_juegos": 3},
+        )
+        self.assertRedirects(response, reverse("carrito"))
+        self.assertEqual(
+            self.client.get(reverse("carrito")).context["carrito_items"][0]["cantidad"],
+            3,
+        )
+
+        response = self.client.post(
+            reverse("quitar_del_carrito", args=[self.juego.pk]),
+        )
+        self.assertRedirects(response, reverse("carrito"))
+        self.assertContains(
+            self.client.get(reverse("carrito")),
+            "Aún no has agregado juegos",
+        )
 
 
 class JuegoCategoriaAdminTests(TestCase):
