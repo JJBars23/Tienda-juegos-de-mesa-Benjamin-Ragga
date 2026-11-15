@@ -36,6 +36,23 @@ class DetallePedidoInline(admin.TabularInline):
     validate_min = True
 
 
+class JuegoPedidoFilter(admin.SimpleListFilter):
+    title = "juego"
+    parameter_name = "juego"
+
+    def lookups(self, request, model_admin):
+        return Juego.objects.filter(
+            detalles_pedido__pedido__isnull=False,
+        ).distinct().order_by("nombre").values_list("pk", "nombre")
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(
+                detalles__juego_id=self.value(),
+            ).distinct()
+        return queryset
+
+
 @admin.register(Pedido)
 class PedidoAdmin(admin.ModelAdmin):
     list_display = (
@@ -45,8 +62,8 @@ class PedidoAdmin(admin.ModelAdmin):
         'cantidad_total',
         'fecha_hora_pedido',
     )
-    search_fields = ('nombre_cliente', 'detalles__juego__nombre')
-    list_filter = ('fecha_hora_pedido',)
+    search_fields = ('nombre_cliente', 'correo_cliente')
+    list_filter = ('fecha_hora_pedido', JuegoPedidoFilter)
     readonly_fields = ('codigo', 'fecha_hora_pedido', 'total_pedido')
     inlines = (DetallePedidoInline,)
 

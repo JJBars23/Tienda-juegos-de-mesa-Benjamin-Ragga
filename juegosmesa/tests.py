@@ -316,6 +316,28 @@ class PedidoAdminTests(TestCase):
         )
         self.client.force_login(self.user)
 
+    def crear_juego(self, nombre):
+        return Juego.objects.create(
+            nombre=nombre,
+            cantidad_jugadores=4,
+            edad_minima=8,
+            precio=12990,
+            stock=3,
+        )
+
+    def crear_pedido(self, juego, nombre, correo):
+        pedido = Pedido.objects.create(
+            nombre_cliente=nombre,
+            correo_cliente=correo,
+            telefono_cliente="123456789",
+        )
+        DetallePedido.objects.create(
+            pedido=pedido,
+            juego=juego,
+            cantidad_juegos=1,
+        )
+        return pedido
+
     def test_admin_de_pedidos_carga_con_los_campos_del_modelo(self):
         categoria = Categoria.objects.create(nombre="Estrategia")
         juego = Juego.objects.create(
@@ -358,3 +380,34 @@ class PedidoAdminTests(TestCase):
         self.assertContains(response, "Cliente de prueba")
         self.assertContains(response, "5")
         self.assertIn("fecha_hora_pedido", admin.site._registry[Pedido].list_display)
+
+    def test_admin_filtra_pedidos_por_juego(self):
+        juego = self.crear_juego("Juego filtrado")
+        otro_juego = self.crear_juego("Otro juego")
+        pedido = self.crear_pedido(juego, "Cliente A", "a@example.com")
+        self.crear_pedido(otro_juego, "Cliente B", "b@example.com")
+
+        response = self.client.get(
+            reverse("admin:juegosmesa_pedido_changelist"),
+            {"juego": juego.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pedidos_mostrados = list(response.context["cl"].queryset)
+        self.assertEqual([item.pk for item in pedidos_mostrados], [pedido.pk])
+
+    def test_admin_busca_pedidos_por_nombre_o_correo(self):
+        juego = self.crear_juego("Juego de búsqueda")
+        pedido = self.crear_pedido(
+            juego,
+            "Cliente Buscable",
+            "correo-buscable@example.com",
+        )
+        url = reverse("admin:juegosmesa_pedido_changelist")
+
+        for termino in ("Cliente Buscable", "correo-buscable@example.com"):
+            with self.subTest(termino=termino):
+                response = self.client.get(url, {"q": termino})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, str(pedido.codigo))
