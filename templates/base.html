@@ -1,90 +1,147 @@
+{% load static %}
 <!doctype html>
-<html lang="es-CL" data-bs-theme="dark">
+<html lang="es-CL" data-bs-theme="light">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta
             name="description"
-            content="{% block descripcion %}Descubre juegos de mesa para compartir en Tienda de Juegos de Mesa.{% endblock %}"
+            content="{% block descripcion %}Descubre juegos de mesa para compartir grandes partidas.{% endblock %}"
         >
         <title>{% block titulo %}Tienda de Juegos de Mesa{% endblock %}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+            rel="stylesheet"
+        >
         <link
             href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
             rel="stylesheet"
             integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
             crossorigin="anonymous"
         >
-        <style>
-            body {
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .skip-link {
-                position: absolute;
-                top: -3rem;
-                left: 1rem;
-                z-index: 1100;
-            }
-
-            .skip-link:focus {
-                top: 1rem;
-            }
-        </style>
+        <link
+            href="{% static 'juegosmesa/css/tienda.css' %}"
+            rel="stylesheet"
+        >
         {% block extra_head %}{% endblock %}
     </head>
-    <body>
-        <a class="skip-link btn btn-light" href="#contenido-principal">
+    <body class="storefront">
+        <a class="skip-link" href="#contenido-principal">
             Saltar al contenido
         </a>
 
-        <header>
-            <div class="border-bottom bg-body-secondary">
-                <div class="container py-2 small text-body-secondary">
-                    Juegos para compartir grandes partidas.
+        <header class="site-header">
+            <div class="tabletop-strip">
+                <div class="site-shell tabletop-strip__inner">
+                    <span class="tabletop-strip__pip" aria-hidden="true"></span>
+                    <p>Juegos para compartir grandes partidas.</p>
+                    <span class="tabletop-strip__note">La mesa está lista</span>
                 </div>
             </div>
-            <nav class="navbar navbar-expand-lg bg-body border-bottom">
-                <div class="container">
-                    <a class="navbar-brand fw-bold" href="{% url 'home' %}">
-                        Tienda de Juegos de Mesa
+
+            <nav class="site-nav" aria-label="Navegación principal">
+                <div class="site-shell site-nav__inner">
+                    <a class="brand-mark" href="{% url 'home' %}">
+                        <span class="brand-die" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </span>
+                        <span class="brand-copy">
+                            <span class="brand-copy__name">Tienda de Juegos de Mesa</span>
+                            <span class="brand-copy__tagline">Juegos para cada mesa</span>
+                        </span>
                     </a>
-                    <button
-                        class="navbar-toggler"
-                        type="button"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#navegacion-principal"
-                        aria-controls="navegacion-principal"
-                        aria-expanded="false"
-                        aria-label="Abrir navegación"
+
+                    <form
+                        class="nav-search"
+                        method="get"
+                        action="{% url 'home' %}"
+                        role="search"
+                        aria-label="Buscar en el catálogo"
                     >
-                        <span class="navbar-toggler-icon"></span>
-                    </button>
-                    <div class="collapse navbar-collapse" id="navegacion-principal">
-                        <ul class="navbar-nav ms-auto">
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'home' %}">Inicio</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'home' %}#catalogo">
-                                    Catálogo
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'carrito' %}">
-                                    Mi pedido
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
+                        <label class="visually-hidden" for="busqueda-nav">
+                            Buscar juegos
+                        </label>
+                        <input
+                            id="busqueda-nav"
+                            name="nombre"
+                            type="search"
+                            value="{{ request.GET.nombre|default:'' }}"
+                            placeholder="Busca tu próxima partida..."
+                        >
+                        {% if categorias %}
+                        <label class="visually-hidden" for="categoria-nav">
+                            Filtrar por estilo
+                        </label>
+                        <select
+                            id="categoria-nav"
+                            name="categoria"
+                            aria-label="Filtrar por estilo o categoría"
+                        >
+                            <option value="">Todos los estilos</option>
+                            {% for categoria in categorias %}
+                            <option
+                                value="{{ categoria.pk }}"
+                                {% if categoria.pk|stringformat:"s" == categoria_seleccionada %}selected{% endif %}
+                            >
+                                {{ categoria.nombre }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+                        <button class="nav-search__submit" type="submit">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="10.8" cy="10.8" r="6.8"></circle>
+                                <path d="m16 16 4.2 4.2"></path>
+                            </svg>
+                            <span class="visually-hidden">Buscar</span>
+                        </button>
+                    </form>
+
+                    {% with juegos_en_carrito=request.session.carrito_pedido|length %}
+                    <a
+                        class="cart-token"
+                        href="{% url 'carrito' %}"
+                        aria-label="Mi pedido, {{ juegos_en_carrito|default:'0' }} producto{{ juegos_en_carrito|pluralize }}"
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 4h2l2.1 10.1a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 1.9-1.4L21 8H6"></path>
+                            <circle cx="10" cy="20" r="1.2"></circle>
+                            <circle cx="18" cy="20" r="1.2"></circle>
+                        </svg>
+                        <span class="cart-token__count" aria-hidden="true">
+                            {{ juegos_en_carrito|default:"0" }}
+                        </span>
+                        <span class="cart-token__label">Mi pedido</span>
+                    </a>
+                    {% endwith %}
                 </div>
             </nav>
+
+            {% if categorias %}
+            <div class="style-rail">
+                <div class="site-shell style-rail__inner">
+                    <span class="style-rail__label">Explorar estilos</span>
+                    {% for categoria in categorias %}
+                    <a
+                        class="style-chip{% if categoria.pk|stringformat:'s' == categoria_seleccionada %} is-active{% endif %}"
+                        href="{% url 'home' %}?categoria={{ categoria.pk }}#catalogo"
+                    >
+                        {{ categoria.nombre }}
+                    </a>
+                    {% endfor %}
+                    <a class="style-chip style-chip--quiet" href="{% url 'home' %}#catalogo">
+                        Ver todos
+                    </a>
+                </div>
+            </div>
+            {% endif %}
         </header>
 
-        <main id="contenido-principal" class="container flex-grow-1 py-4 py-lg-5">
+        <main id="contenido-principal" class="site-main site-shell">
             {% if messages %}
-            <div class="mb-4" aria-live="polite">
+            <div class="site-messages" aria-live="polite">
                 {% for message in messages %}
                 <div
                     class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %}"
@@ -98,9 +155,17 @@
             {% block contenido %}{% endblock %}
         </main>
 
-        <footer class="border-top bg-body-secondary">
-            <div class="container py-4 small text-body-secondary">
-                Tienda de Juegos de Mesa · Que comience la partida.
+        <footer class="site-footer">
+            <div class="site-shell site-footer__inner">
+                <div>
+                    <p class="site-footer__title">Tienda de Juegos de Mesa</p>
+                    <p class="site-footer__copy">
+                        Buenas historias, mejores partidas.
+                    </p>
+                </div>
+                <a class="site-footer__link" href="{% url 'home' %}#catalogo">
+                    Volver al catálogo
+                </a>
             </div>
         </footer>
 

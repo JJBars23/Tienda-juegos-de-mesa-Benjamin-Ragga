@@ -1,30 +1,51 @@
 {% extends "base.html" %}
 {% load formatos %}
 
-{% block titulo %}Catálogo | Tienda de Juegos de Mesa{% endblock %}
+{% block titulo %}Juegos para cada mesa | Tienda de Juegos de Mesa{% endblock %}
 
 {% block contenido %}
-<section aria-labelledby="titulo-catalogo">
-    <div class="mb-4">
-        <p class="text-uppercase small fw-semibold text-body-secondary mb-2">
-            Encuentra tu próxima partida
+<section class="hero" aria-labelledby="titulo-portada">
+    <div class="hero__copy">
+        <span class="eyebrow">Una mesa, muchas historias</span>
+        <h1 id="titulo-portada">Tu próxima gran partida empieza aquí.</h1>
+        <p>
+            Eurogames para pensar, party games para reír, cartas para llevar
+            contigo y clásicos para compartir en familia.
         </p>
-        <h1 id="titulo-catalogo" class="display-6 fw-bold">Juegos para cada mesa</h1>
-        <p class="text-body-secondary mb-0">
-            Explora el catálogo y descubre tu próximo juego favorito.
-        </p>
+        <a class="tactile-button" href="#catalogo">
+            Explorar juegos
+            <svg class="icon-stroke" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 12h15"></path>
+                <path d="m13 5 7 7-7 7"></path>
+            </svg>
+        </a>
+    </div>
+    <div class="hero__table-card" aria-hidden="true">
+        <span class="hero__feature-label">Juego destacado del mes</span>
+        <div class="hero-die">
+            <span></span><span></span><span></span><span></span><span></span>
+        </div>
+    </div>
+</section>
+
+<section id="catalogo" class="catalog-section" aria-labelledby="titulo-catalogo">
+    <div class="catalog-heading">
+        <div>
+            <p class="catalog-kicker">Elige tu próxima aventura</p>
+            <h2 id="titulo-catalogo">Juegos para cada mesa</h2>
+            <p>Encuentra una caja nueva para tu próxima noche de juego.</p>
+        </div>
     </div>
 
     <form
-        class="row g-3 align-items-end mb-4 p-3 p-md-4 rounded-3 bg-body-secondary"
+        class="catalog-filter"
         method="get"
-        action="{% url 'home' %}"
-        aria-label="Buscar juegos"
+        action="{% url 'home' %}#catalogo"
+        aria-label="Buscar y filtrar juegos"
     >
-        <div class="col-12 col-md-5">
-            <label class="form-label" for="busqueda">Buscar por nombre</label>
+        <div class="field-stack">
+            <label for="busqueda">Buscar por nombre</label>
             <input
-                class="form-control"
                 id="busqueda"
                 type="search"
                 name="nombre"
@@ -32,10 +53,10 @@
                 placeholder="Ej. Catan"
             >
         </div>
-        <div class="col-12 col-md-5">
-            <label class="form-label" for="categoria">Categoría</label>
-            <select class="form-select" id="categoria" name="categoria">
-                <option value="">Todas las categorías</option>
+        <div class="field-stack">
+            <label for="categoria">Filtrar por estilo</label>
+            <select id="categoria" name="categoria">
+                <option value="">Todos los estilos</option>
                 {% for categoria in categorias %}
                 <option
                     value="{{ categoria.pk }}"
@@ -46,65 +67,109 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-12 col-md-2 d-flex gap-2">
-            <button class="btn btn-primary flex-grow-1" type="submit">Buscar</button>
-            <a class="btn btn-outline-secondary" href="{% url 'home' %}">Limpiar</a>
+        <div class="catalog-filter__actions">
+            <button class="tactile-button" type="submit">Buscar</button>
+            <a class="button-quiet" href="{% url 'home' %}#catalogo">Limpiar</a>
         </div>
     </form>
 
-    <div id="catalogo" class="row g-4">
+    <div class="games-grid">
         {% for juego in juegos %}
-        <div class="col-12 col-sm-6 col-lg-4">
-            <article class="card h-100 border-secondary-subtle">
-                <a
-                    class="text-decoration-none"
-                    href="{% url 'detalle_juego' juego.pk %}"
-                    aria-label="Ver detalles de {{ juego.nombre }}"
+        {% with categoria_principal=juego.categorias.all|first %}
+        <article class="game-card">
+            <a
+                class="game-card__cover"
+                href="{% url 'detalle_juego' juego.pk %}"
+                aria-label="Ver detalles de {{ juego.nombre }}"
+            >
+                {% if juego.imagen %}
+                <img
+                    src="{{ juego.imagen.url }}"
+                    alt="Caja de {{ juego.nombre }}"
+                    loading="lazy"
                 >
-                    {% if juego.imagen %}
-                    <img
-                        src="{{ juego.imagen.url }}"
-                        class="card-img-top"
-                        alt="{{ juego.nombre }}"
-                        loading="lazy"
-                    >
+                {% else %}
+                <span class="game-card__placeholder" aria-hidden="true">
+                    Juego de mesa
+                </span>
+                {% endif %}
+                <span class="game-card__badge">
+                    {% if categoria_principal %}
+                        {{ categoria_principal.nombre }}
                     {% else %}
-                    <div class="card-img-top bg-body-secondary d-flex align-items-center justify-content-center text-body-secondary" style="height: 12rem;">
-                        Imagen no disponible
-                    </div>
+                        Juego de mesa
                     {% endif %}
-                </a>
-                <div class="card-body d-flex flex-column">
-                    <h2 class="h5 card-title">
-                        <a
-                            class="link-light link-underline-opacity-0 link-underline-opacity-75-hover"
-                            href="{% url 'detalle_juego' juego.pk %}"
-                        >
-                            {{ juego.nombre }}
-                        </a>
-                    </h2>
-                    <p class="small text-body-secondary mb-3">
-                        {% for categoria in juego.categorias.all %}
-                            {{ categoria.nombre }}{% if not forloop.last %} · {% endif %}
-                        {% empty %}
-                            Sin categoría
-                        {% endfor %}
-                    </p>
-                    <p class="fs-5 fw-semibold mt-auto mb-0">${{ juego.precio|clp }}</p>
-                    <p class="small mt-2 mb-0">
-                        {% if juego.stock > 0 %}
-                        <span class="text-success">En stock</span>
-                        {% else %}
-                        <span class="text-danger">Agotado</span>
-                        {% endif %}
-                    </p>
-                </div>
-            </article>
-        </div>
+                </span>
+            </a>
+
+            <div class="game-card__body">
+                <h3 class="game-card__title">
+                    <a href="{% url 'detalle_juego' juego.pk %}">
+                        {{ juego.nombre }}
+                    </a>
+                </h3>
+                <p class="game-card__categories">
+                    {% for categoria in juego.categorias.all %}
+                        {{ categoria.nombre }}{% if not forloop.last %} · {% endif %}
+                    {% empty %}
+                        Descubre este juego
+                    {% endfor %}
+                </p>
+
+                <p class="game-card__price">${{ juego.precio|clp }}</p>
+
+                <ul class="game-card__meta" aria-label="Información del juego">
+                    <li>
+                        <svg class="icon-stroke" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="9" cy="8" r="3"></circle>
+                            <path d="M3.5 19v-1.5a5.5 5.5 0 0 1 11 0V19"></path>
+                            <path d="M16 5.5a3 3 0 0 1 0 5.8M18 14a5 5 0 0 1 2.5 4.3V19"></path>
+                        </svg>
+                        <span class="game-card__meta-label">Jugadores</span>
+                        <span class="game-card__meta-value">
+                            {{ juego.cantidad_jugadores }}
+                        </span>
+                    </li>
+                    <li>
+                        <svg class="icon-stroke" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="12" r="8.5"></circle>
+                            <path d="M12 7v5l3.5 2"></path>
+                        </svg>
+                        <span class="game-card__meta-label">Duración</span>
+                        <span class="game-card__meta-value">
+                            {% if juego.duracion_minutos %}
+                                {{ juego.duracion_minutos }} min
+                            {% else %}
+                                Sin informar
+                            {% endif %}
+                        </span>
+                    </li>
+                    <li>
+                        <svg class="icon-stroke" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 3 20 6v5c0 5-3.4 8.3-8 10-4.6-1.7-8-5-8-10V6l8-3Z"></path>
+                            <path d="M9 12h6"></path>
+                        </svg>
+                        <span class="game-card__meta-label">Edad</span>
+                        <span class="game-card__meta-value">{{ juego.edad_minima }}+</span>
+                    </li>
+                </ul>
+
+                <p class="game-card__availability">Disponible para jugar</p>
+                <form method="post" action="{% url 'detalle_juego' juego.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="cantidad_juegos" value="1">
+                    <button class="tactile-button game-card__add" type="submit">
+                        Agregar al carrito
+                    </button>
+                </form>
+            </div>
+        </article>
+        {% endwith %}
         {% empty %}
-        <div class="col-12">
+        <div class="empty-catalog">
+            <h3>No encontramos esa partida</h3>
             <p class="text-body-secondary mb-0">
-                No hay juegos disponibles que coincidan con la búsqueda.
+                Prueba con otro nombre o elige un estilo diferente.
             </p>
         </div>
         {% endfor %}

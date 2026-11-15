@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.contrib.staticfiles import finders
 from django.template import Context, Template
 from django.test import TestCase
 from django.urls import reverse
@@ -154,9 +155,19 @@ class StorefrontTemplateTests(TestCase):
         self.assertTemplateUsed(response, "base.html")
         self.assertContains(response, 'lang="es-CL"')
         self.assertContains(response, "Saltar al contenido")
+        self.assertContains(response, "juegosmesa/css/tienda.css")
+        self.assertContains(response, "Tu próxima gran partida empieza aquí.")
+        self.assertContains(response, "Juego destacado del mes")
+        self.assertContains(response, "Todos los estilos")
+        self.assertContains(response, "Agregar al carrito")
+        self.assertContains(response, 'name="cantidad_juegos" value="1"')
+        self.assertContains(response, "Sin informar")
         self.assertContains(response, "Juego disponible")
         self.assertNotContains(response, "Juego agotado")
         self.assertNotContains(response, "Juego no disponible")
+
+    def test_stylesheet_storefront_is_discoverable(self):
+        self.assertIsNotNone(finders.find("juegosmesa/css/tienda.css"))
 
     def test_game_detail_uses_shared_base_template(self):
         juego = Juego.objects.create(
